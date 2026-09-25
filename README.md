@@ -24,19 +24,26 @@ The points are summed and capped at 100. A transaction is **flagged** when the t
 
 ## Run it
 
-Requires Java 21 and Maven.
+Requires only Java 21 (`brew install openjdk@21` on macOS). Maven is bundled through the wrapper.
 
 ```bash
-mvn spring-boot:run
+git clone https://github.com/kushagra-d/RiskGuard.git
+cd RiskGuard
+./run.sh
 ```
 
-The API starts on `http://localhost:8080`. The H2 console is at `http://localhost:8080/h2-console`
-(JDBC URL `jdbc:h2:mem:riskguard`, user `sa`, empty password).
+`run.sh` starts the app and opens the demo page at `http://localhost:8080`, where you can score
+transactions and see the reasons. Press `Ctrl+C` to stop.
+
+Without the script: `./mvnw spring-boot:run` (or `mvn spring-boot:run` if Maven is installed).
+
+The H2 console is at `http://localhost:8080/h2-console` (JDBC URL `jdbc:h2:mem:riskguard`, user `sa`,
+empty password). The database is in memory and resets on each restart.
 
 Run the tests with:
 
 ```bash
-mvn clean test
+./mvnw clean test
 ```
 
 ## API

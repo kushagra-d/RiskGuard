@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RiskGuard</title>
+<style>
+  :root { --bg:#0f1419; --card:#1a2129; --line:#2b3540; --text:#e6edf3; --muted:#8b98a5;
+          --ok:#3fb950; --bad:#f85149; --accent:#58a6ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:32px 16px 64px; }
+  h1 { margin:0 0 4px; font-size:26px; }
+  p.sub { margin:0 0 24px; color:var(--muted); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:20px; margin-bottom:20px; }
+  label { display:block; font-size:13px; color:var(--muted); margin:12px 0 4px; }
+  input { width:100%; padding:9px 10px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:6px; font:inherit; }
+  input:focus { outline:2px solid var(--accent); border-color:transparent; }
+  .row { display:flex; gap:12px; } .row > div { flex:1; }
+  button { font:inherit; cursor:pointer; border-radius:6px; border:1px solid var(--line); padding:8px 14px; background:var(--bg); color:var(--text); }
+  button.primary { background:var(--accent); color:#04121f; border-color:var(--accent); font-weight:600; margin-top:16px; }
+  .presets { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:4px; }
+  .presets span { color:var(--muted); font-size:13px; align-self:center; }
+  .score { display:flex; align-items:center; gap:16px; }
+  .num { font-size:44px; font-weight:700; line-height:1; }
+  .badge { padding:3px 10px; border-radius:99px; font-size:13px; font-weight:600; }
+  .badge.ok { background:rgba(63,185,80,.15); color:var(--ok); }
+  .badge.bad { background:rgba(248,81,73,.15); color:var(--bad); }
+  .bar { height:8px; background:var(--bg); border-radius:99px; overflow:hidden; margin:14px 0; }
+  .bar > div { height:100%; transition:width .3s; }
+  ul { margin:8px 0 0; padding-left:20px; } li { margin:4px 0; }
+  .muted { color:var(--muted); } .err { color:var(--bad); }
+  code { background:var(--bg); padding:1px 6px; border-radius:4px; font-size:13px; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>RiskGuard</h1>
+  <p class="sub">Rule-based transaction risk scoring. Every score comes with the reasons behind it.</p>
+
+  <div class="card">
+    <div class="presets">
+      <span>Try:</span>
+      <button type="button" data-p="low">Low risk</button>
+      <button type="button" data-p="flag">Flagged</button>
+      <button type="button" data-p="vel">Velocity (sends 4)</button>
+    </div>
+    <form id="f">
+      <label for="acc">Account ID</label>
+      <input id="acc" value="ACC-1001" required>
+      <div class="row">
+        <div><label for="amt">Amount</label><input id="amt" type="number" step="0.01" min="0.01" value="2500" required></div>
+        <div><label for="cty">Merchant country (2-letter code)</label><input id="cty" value="IN" required></div>
+      </div>
+      <button class="primary" type="submit">Score transaction</button>
+    </form>
+  </div>
+
+  <div class="card" id="out"><span class="muted">Submit a transaction to see its score.</span></div>
+
+  <p class="muted">
+    Rules: amount &gt; 100000 <code>+40</code> · merchant country outside IN/US/GB/SG/AE <code>+25</code> ·
+    3+ transactions from the account in 10 minutes <code>+35</code>. Flagged at 50+.
+    <br>API: <code>POST /api/transactions/score</code>, <code>GET /api/transactions/{id}</code> ·
+    <a href="/h2-console" target="_blank">H2 console</a>
+  </p>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const out = $('out');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function score(body) {
+  const res = await fetch('/api/transactions/score', {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  return { ok: res.ok, data };
+}
+
+function show(r) {
+  if (!r.ok) {
+    out.innerHTML = '<div class="err"><b>Validation error</b><ul>' +
+      Object.entries(r.data).map(([k, v]) => `<li>${esc(k)}: ${esc(v)}</li>`).join('') + '</ul></div>';
+    return;
+  }
+  const d = r.data, color = d.flagged ? 'var(--bad)' : 'var(--ok)';
+  out.innerHTML =
+    `<div class="score"><div class="num" style="color:${color}">${d.riskScore}</div>
+       <div><span class="badge ${d.flagged ? 'bad' : 'ok'}">${d.flagged ? 'FLAGGED' : 'NOT FLAGGED'}</span>
+       <div class="muted">Transaction #${d.transactionId}</div></div></div>
+     <div class="bar"><div style="width:${d.riskScore}%;background:${color}"></div></div>` +
+    (d.reasons.length
+      ? '<b>Why this score</b><ul>' + d.reasons.map(x => `<li>${esc(x)}</li>`).join('') + '</ul>'
+      : '<span class="muted">No rules triggered.</span>');
+}
+
+$('f').addEventListener('submit', async e => {
+  e.preventDefault();
+  show(await score({ accountId: $('acc').value, amount: $('amt').value, merchantCountry: $('cty').value }));
+});
+
+document.querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', async () => {
+  const p = b.dataset.p;
+  if (p === 'low')  { $('acc').value = 'ACC-1001'; $('amt').value = 2500;   $('cty').value = 'IN'; }
+  if (p === 'flag') { $('acc').value = 'ACC-2002'; $('amt').value = 250000; $('cty').value = 'RU'; }
+  if (p === 'vel')  { $('acc').value = 'ACC-' + Math.floor(Math.random() * 9000 + 1000); $('amt').value = 100; $('cty').value = 'US'; }
+  const n = p === 'vel' ? 4 : 1;
+  let r;
+  for (let i = 0; i < n; i++) r = await score({ accountId: $('acc').value, amount: $('amt').value, merchantCountry: $('cty').value });
+  show(r);
+}));
+</script>
+</body>
+</html>
